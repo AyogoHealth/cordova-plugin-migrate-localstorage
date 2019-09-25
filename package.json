@@ -16,7 +16,7 @@
     "cordova-ios",
     "uiwebview",
     "wkwebview",
-    "localstorage"
+    "localstorage",
     "indexeddb"
   ],
   "author": "Martin Kleinschrodt <martin@maklesoft.com>",
