@@ -72,13 +72,18 @@
     NSString* appLibraryFolder = [NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES) objectAtIndex:0];
     NSString* original;
 
-    if ([[NSFileManager defaultManager] fileExistsAtPath:[appLibraryFolder stringByAppendingPathComponent:@"WebKit/LocalStorage/___IndexedDB/file__0"]]) {
-        original = [appLibraryFolder stringByAppendingPathComponent:@"WebKit/LocalStorage"];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:[appLibraryFolder stringByAppendingPathComponent:@"WebKit/LocalStorage/___IndexedDB/v1/file__0"]]) {
+        original = [appLibraryFolder stringByAppendingPathComponent:@"WebKit/LocalStorage/___IndexedDB/v1"];
     } else {
-        original = [appLibraryFolder stringByAppendingPathComponent:@"Caches"];
+        if([[NSFileManager defaultManager] fileExistsAtPath:[appLibraryFolder stringByAppendingPathComponent:@"WebKit/LocalStorage/___IndexedDB/file__0"]] ) {
+            original = [appLibraryFolder stringByAppendingPathComponent:@"WebKit/LocalStorage/___IndexedDB"];
+        } else {
+            // FIXME this is the wrong location for the cache
+            original = [appLibraryFolder stringByAppendingPathComponent:@"Caches"];
+        }
     }
 
-    original = [original stringByAppendingPathComponent:@"___IndexedDB/file__0"];
+    original = [original stringByAppendingPathComponent:@"file__0"];
 
     NSString* target = [[NSString alloc] initWithString: [appLibraryFolder stringByAppendingPathComponent:@"WebKit"]];
 
@@ -88,7 +93,11 @@
     target = [target stringByAppendingPathComponent:bundleIdentifier];
 #endif
 
-    target = [target stringByAppendingPathComponent:@"WebsiteData/IndexedDB/file__0"];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:[appLibraryFolder stringByAppendingPathComponent:@"WebKit/WebsiteData/IndexedDB/v1"]]) {
+        target = [target  stringByAppendingPathComponent:@"WebsiteData/IndexedDB/v1/file__0"];
+    } else {
+        target = [target stringByAppendingPathComponent:@"WebsiteData/IndexedDB/v0/file__0"];
+    }
 
     // Only copy data if no existing indexed db data exists yet for wkwebview
     if (![[NSFileManager defaultManager] fileExistsAtPath:target]) {
