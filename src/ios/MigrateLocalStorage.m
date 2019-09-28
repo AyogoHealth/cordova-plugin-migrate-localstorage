@@ -5,24 +5,25 @@
 - (BOOL) copyFrom:(NSString*)src to:(NSString*)dest
 {
     NSFileManager* fileManager = [NSFileManager defaultManager];
-
-    // Bail out if source file does not exist
-    if (![fileManager fileExistsAtPath:src]) {
-        return NO;
-    }
-
-    // Bail out if dest file exists
-    if ([fileManager fileExistsAtPath:dest]) {
-        return NO;
-    }
+    NSString* appLibraryFolder = [NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES) objectAtIndex:0];
 
     // create path to dest
     if (![fileManager createDirectoryAtPath:[dest stringByDeletingLastPathComponent] withIntermediateDirectories:YES attributes:nil error:nil]) {
         return NO;
     }
 
-    // copy src to dest
-    return [fileManager copyItemAtPath:src toPath:dest error:nil];
+    NSArray* srcFiles = [fileManager contentsOfDirectoryAtPath:src error:nil];
+    BOOL success = YES;
+    for (NSString *file in srcFiles) {
+        NSError *err;
+        NSString* srcFile = [appLibraryFolder stringByAppendingPathComponent:@"WebKit/LocalStorage/___IndexedDB"];
+        srcFile = [srcFile stringByAppendingPathComponent:file];
+        NSString* destFile = [appLibraryFolder stringByAppendingPathComponent:@"WebKit/WebsiteData/IndexedDB"];
+        destFile = [destFile stringByAppendingPathComponent:file];
+        BOOL fileSuccess = [fileManager copyItemAtPath:srcFile toPath:destFile error:&err];
+        success = success && fileSuccess;
+    }
+    return success;
 }
 
 - (BOOL) migrateLocalStorage
@@ -64,60 +65,56 @@
     }
 }
 
-// Added
+// FIXME clean this mess up
 - (BOOL) migrateIndexedDB
 {
-    // Migrate UIWebView indexed db files to WKWebView.
-
-    NSString* appLibraryFolder = [NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES) objectAtIndex:0];
-    NSString* original;
-
-    if ([[NSFileManager defaultManager] fileExistsAtPath:[appLibraryFolder stringByAppendingPathComponent:@"WebKit/LocalStorage/___IndexedDB/v1/file__0"]]) {
-        original = [appLibraryFolder stringByAppendingPathComponent:@"WebKit/LocalStorage/___IndexedDB/v1"];
+  NSString* webViewEngineClass = [ self.commandDelegate.settings objectForKey:[@"CordovaWebViewEngine" lowercaseString]];
+    if ([webViewEngineClass isEqualToString:@"CDVUIWebViewEngine"]) {
+        return NO;
     } else {
-        if([[NSFileManager defaultManager] fileExistsAtPath:[appLibraryFolder stringByAppendingPathComponent:@"WebKit/LocalStorage/___IndexedDB/file__0"]] ) {
-            original = [appLibraryFolder stringByAppendingPathComponent:@"WebKit/LocalStorage/___IndexedDB"];
+        NSString* appLibraryFolder = [NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES) objectAtIndex:0];
+
+        NSFileManager* fileManager = [NSFileManager defaultManager];
+
+        NSString* original = [appLibraryFolder stringByAppendingPathComponent:@"WebKit/LocalStorage/___IndexedDB"];
+
+        NSString* target = [[NSString alloc] initWithString: [appLibraryFolder stringByAppendingPathComponent:@"WebKit/WebsiteData/IndexedDB"]];
+
+        if ([[NSFileManager defaultManager] fileExistsAtPath:original]) {
+            NSLog(@"No existing indexed db data found for WKWebView. Migrating data from UIWebView");
+            BOOL copySuccessful = [self copyFrom:original to:target];
+            if (copySuccessful) {
+                NSLog(@"IndexedDB migration copy successful");
+                NSArray* srcFiles = [fileManager contentsOfDirectoryAtPath:original error:nil];
+                BOOL deleted = YES;
+                for (NSString *file in srcFiles) {
+                    NSError *err;
+                    NSString* srcFile = [appLibraryFolder stringByAppendingPathComponent:@"WebKit/LocalStorage/___IndexedDB"];
+                    srcFile = [srcFile stringByAppendingPathComponent:file];
+                    BOOL deleteSuccessful = [[NSFileManager defaultManager] removeItemAtPath:original error:&err];
+                    deleted = deleted && deleteSuccessful;
+                }
+                if (deleted) {
+                    NSLog(@"IndexedDB migration deletion successful");
+                } else {
+                    NSLog(@"IndexedDB migration deletion failed");
+                }
+                return deleted;
+            } else {
+                NSLog(@"IndexedDB migration copy failed");
+                return NO;
+            }
         } else {
-            // FIXME this is the wrong location for the cache
-            original = [appLibraryFolder stringByAppendingPathComponent:@"Caches"];
+            NSLog(@"No existing indexed db data found for UIWebview");
+            return NO;
         }
     }
-
-    original = [original stringByAppendingPathComponent:@"file__0"];
-
-    NSString* target = [[NSString alloc] initWithString: [appLibraryFolder stringByAppendingPathComponent:@"WebKit"]];
-
-#if TARGET_IPHONE_SIMULATOR
-    // the simulutor squeezes the bundle id into the path
-    NSString* bundleIdentifier = [[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleIdentifier"];
-    target = [target stringByAppendingPathComponent:bundleIdentifier];
-#endif
-
-    if ([[NSFileManager defaultManager] fileExistsAtPath:[appLibraryFolder stringByAppendingPathComponent:@"WebKit/WebsiteData/IndexedDB/v1"]]) {
-        target = [target  stringByAppendingPathComponent:@"WebsiteData/IndexedDB/v1/file__0"];
-    } else {
-        target = [target stringByAppendingPathComponent:@"WebsiteData/IndexedDB/v0/file__0"];
-    }
-
-    // Only copy data if no existing indexed db data exists yet for wkwebview
-    if (![[NSFileManager defaultManager] fileExistsAtPath:target]) {
-        NSLog(@"No existing indexed db data found for WKWebView. Migrating data from UIWebView");
-        BOOL success = [self copyFrom:original to:target];
-        return success;
-    }
-    else {
-        return NO;
-    }
+    return NO;
 }
 
 - (void) pluginInitialize
 {
-    [self migrateLocalStorage];
-    BOOL lsResult = [self migrateLocalStorage];
     BOOL idbResult = [self migrateIndexedDB];
-    if (lsResult) {
-        NSLog(@"Successfully migrated localstorage");
-    }
     if (idbResult) {
         NSLog(@"Successfully migrated indexed db");
     }
